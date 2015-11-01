@@ -6,10 +6,11 @@ import re
 import bs4
 
 client = MongoClient('localhost', 27017)
-db = client['lagou']
-xm = db[u'厦门']
+lagou = client['lagou']
+test = lagou[u'test']
 
-temp = xm.find_one()
+
+
 
 # job_list = []
 # for data in xm.find():
@@ -61,8 +62,17 @@ def get_jd(job_id):
     posi_href_list = bs_rela.select('a.position')
     id_list = [filter(str.isdigit, id.attrs['href']) for id in posi_href_list]
     result['jd'] = jd_str
-    result['post_again'] = dict(zip([id_list, details_list]))
+    result['post_again'] = dict(zip(id_list, details_list))
     return result
 
 
+temp = test.find_one()
 
+for i in test.find():
+    id = i['positionId']
+
+test_jd = lagou['test_jd']
+
+temp = test.find_one()
+temp_jd = get_jd(temp['positionId'])
+test_jd.insert_one(temp_jd)
