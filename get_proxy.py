@@ -40,9 +40,27 @@ def cn_proxy():
         proxy_list.append(proxy)
     return proxy_list
 
+def get_getproxy():
+    url = 'http://www.getproxy.jp/en/china/1'
+    proxy = urllib2.ProxyHandler({'http': '115.29.169.182:37711'})
+    opener = urllib2.build_opener(proxy)
+    urllib2.install_opener(opener)
+    response = urllib2.urlopen(url)
+    web = response.read()
+    soup = bs4.BeautifulSoup(web)
+    table = soup.find('table', {'class': 'mytable'}).find_all('tr')
+    proxy_list = []
+    for row in table[1:-1]:
+        proxy = {}
+        elements = row.text.strip('\n').split('n')
+        proxy['ip'] = elements[0]
+        proxy['update_time'] = elements[-1]
+        proxy_list.append(proxy)
+    return proxy_list
 
-rows = table_body.find_all('tr')
-for row in rows:
-    cols = row.find_all('td')
-    cols = [ele.text.strip() for ele in cols]
-    data.append([ele for ele in cols if ele]) # Get rid of empty values
+
+
+
+
+
+

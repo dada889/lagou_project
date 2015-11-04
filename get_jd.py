@@ -6,10 +6,15 @@ import urllib2
 import re
 import bs4
 import time
+import socket
+socket.setdefaulttimeout(5)
 
-
-
-
+proxy = urllib2.ProxyHandler({'http': '180.166.112.47:8888'})
+opener = urllib2.build_opener(proxy)
+url_loader = urllib2
+url_loader.install_opener(opener)
+web = url_loader.urlopen('http://www.lagou.com/', timeout=5)
+text = web.read()
 # job_list = []
 # for data in xm.find():
 #     temp = {}
