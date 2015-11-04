@@ -21,7 +21,7 @@ url2 = 'http://cn-proxy.com/'
 
 # url3 = 'http://www.freeproxylists.net/zh/cn.html'
 
-def cn_proxy():
+def get_cn_proxy():
     url = 'http://cn-proxy.com/'
     proxy = urllib2.ProxyHandler({'http': '115.29.169.182:37711'})
     opener = urllib2.build_opener(proxy)
