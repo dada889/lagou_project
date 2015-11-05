@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'admin'
 import urllib2
-import pymongo
+from lagou_db import LagouDb
 import bs4
 import requests
 import re
@@ -9,18 +9,6 @@ import threading
 import time
 import random
 
-url = 'http://www.freeproxylists.net/zh/'
-proxyDict = {'http': 'http://115.29.169.182:37711'}
-payload = {'c': 'CN', 'u': 90, 'page': '1'}
-# header = {'cookie': 'OTZ=3036000_24_24__24_; PREF=ID=1111111111111111:FF=0:TM=1444790517:LM=1444790517:V=1:S=mQEatvdig0QZQ7Eo; NID=73=tgl8dfoWhmbVIp7fFLDjYqtwBeeyocbaOXBxK8ALE16rBjPy12VQODsvMbED9GhzTbdxK5nIYY7TCay-lSxfwbkMJ4iDgYO36aMwQ0FDKMiMuAJpfHYUrfl-RRvhN6Dbpin4MhlPfJWLrvSnhsv-bikp086BpYgqFEfrup9vNB8K5AbYdxkfU3U2s4RW_w-uBQ'}
-r = requests.get(url, proxies=proxyDict, params=payload)
-content = r.content
-print content
-soup = bs4.BeautifulSoup(content)
-
-url1 = 'http://www.freeproxylists.net/zh/'
-
-url2 = 'http://cn-proxy.com/'
 
 # url3 = 'http://www.freeproxylists.net/zh/cn.html'
 
@@ -44,8 +32,8 @@ def get_cn_proxy():
         proxy_list.append(proxy)
     return proxy_list
 
-def get_getproxy():
-    url = 'http://www.getproxy.jp/en/china/1'
+def get_getproxy(page='1'):
+    url = 'http://www.getproxy.jp/en/china/' + str(page)
     proxy = urllib2.ProxyHandler({'http': '115.29.169.182:37711'})
     opener = urllib2.build_opener(proxy)
     urllib2.install_opener(opener)
@@ -64,44 +52,6 @@ def get_getproxy():
     return proxy_list
 
 
-proxy = urllib2.ProxyHandler({'http': '218.244.132.2:37711'})
-opener = urllib2.build_opener(proxy)
-urllib2.install_opener(opener)
-response = urllib2.urlopen('http://www.google,com')
-
-import urllib2
-cookies = urllib2.HTTPCookieProcessor()
-proxy = urllib2.ProxyHandler({'http': '218.244.132.2:37711'})
-opener = urllib2.build_opener(cookies, proxy)
-opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 6.2; WOW64; rv:22.0) Gecko/20100101 Firefox/22.0')]
-req = opener.open('http://site.baidu.com/', timeout=5)
-result = req.read()
-print result.find('030173')
-
-proxy1 = get_getproxy()
-proxy1 = get_cn_proxy()
-for proxy in proxy1:
-    cookies = urllib2.HTTPCookieProcessor()
-    proxyHandler = urllib2.ProxyHandler({proxy['type']: proxy['ip']})
-    # proxyHandler = urllib2.ProxyHandler({'http': '115.29.169.182:37711'})
-    opener = urllib2.build_opener(cookies, proxyHandler)
-    opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 6.2; WOW64; rv:22.0) Gecko/20100101 Firefox/22.0')]
-    t1 = time.time()
-    try:
-        req = opener.open('http://site.baidu.com/', timeout=5)
-        result = req.read()
-        timeused = time.time() - t1
-        pos = result.find('030173')
-        if pos > 1:
-            print 'get pos', proxy['ip']
-        else:
-            print 'not pos', proxy['ip']
-            continue
-    except Exception, e:
-        print 'fail', proxy['ip']
-
-
-
 class ProxyCheck(threading.Thread):
     def __init__(self, proxyList):
         threading.Thread.__init__(self)
@@ -109,26 +59,57 @@ class ProxyCheck(threading.Thread):
         self.timeout = 5
         self.testUrl = 'http://www.baidu,com/'
 
-    def checkProxy(selfself):
+    def checkProxy(self):
         cookies = urllib2.HTTPCookieProcessor()
-        for proxy in proxy1:
+        # valid_proxy = []
+        for proxy in self.proxyList:
             proxyHandler = urllib2.ProxyHandler({proxy['type']: proxy['ip']})
             # proxyHandler = urllib2.ProxyHandler({'http': '115.29.169.182:37711'})
             opener = urllib2.build_opener(cookies, proxyHandler)
             opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 6.2; WOW64; rv:22.0) Gecko/20100101 Firefox/22.0')]
             t1 = time.time()
             try:
-                req = opener.open('http://site.baidu.com/', timeout=5)
+                req = opener.open('http://site.baidu.com/', timeout=self.timeout)
                 result = req.read()
                 timeused = time.time() - t1
                 pos = result.find('030173')
                 if pos > 1:
-                    print 'get pos', proxy['ip']
+                    print 'get pos', proxy['ip'], time.time()
+                    valid_proxy.append(proxy)
                 else:
-                    print 'not pos', proxy['ip']
+                    print 'not pos', proxy['ip'], time.time()
                     continue
             except Exception, e:
-                print 'fail', proxy['ip']
+                print 'fail', proxy['ip'], time.time()
+
+    def run(self):
+        self.checkProxy()
+
+
+
+if __name__ == "__main__":
+    valid_proxy = []
+    ti = time.time()
+    checkThreads = []
+    proxy_list = get_getproxy()
+    for i in range(2, 5):
+        proxy_list += get_getproxy(i)
+    t_num = 20
+    for i in range(t_num):
+        t = ProxyCheck(proxy_list[i*len(proxy_list)/t_num:(i+1)*len(proxy_list)/t_num])
+        checkThreads.append(t)
+
+    for i in range(len(checkThreads)):
+        checkThreads[i].start()
+
+    for i in range(len(checkThreads)):
+        checkThreads[i].join()
+    print '%s thread used time %s' % (t_num, time.time()-ti)
+    # print proxy_list
+
+    db = LagouDb().db()
+    db['proxy'].insert_many(valid_proxy)
+
 
 
 
