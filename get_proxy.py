@@ -53,11 +53,12 @@ def get_getproxy(page='1'):
 
 
 class ProxyCheck(threading.Thread):
-    def __init__(self, proxyList):
+    def __init__(self, proxyList, valid_proxy):
         threading.Thread.__init__(self)
         self.proxyList = proxyList
         self.timeout = 5
         self.testUrl = 'http://www.baidu,com/'
+        self.valid_proxy = valid_proxy
 
     def checkProxy(self):
         cookies = urllib2.HTTPCookieProcessor()
@@ -74,8 +75,8 @@ class ProxyCheck(threading.Thread):
                 timeused = time.time() - t1
                 pos = result.find('030173')
                 if pos > 1:
+                    self.valid_proxy.append(proxy['ip'])
                     print 'get pos', proxy['ip'], time.time()
-                    valid_proxy.append(proxy)
                 else:
                     print 'not pos', proxy['ip'], time.time()
                     continue
@@ -85,15 +86,13 @@ class ProxyCheck(threading.Thread):
     def run(self):
         self.checkProxy()
 
-
-
 if __name__ == "__main__":
     valid_proxy = []
     ti = time.time()
     checkThreads = []
     proxy_list = get_getproxy()
-    for i in range(2, 5):
-        proxy_list += get_getproxy(i)
+    # for i in range(2, 5):
+    #     proxy_list += get_getproxy(i)
     t_num = 20
     for i in range(t_num):
         t = ProxyCheck(proxy_list[i*len(proxy_list)/t_num:(i+1)*len(proxy_list)/t_num])
@@ -107,8 +106,8 @@ if __name__ == "__main__":
     print '%s thread used time %s' % (t_num, time.time()-ti)
     # print proxy_list
 
-    db = LagouDb().db()
-    db['proxy'].insert_many(valid_proxy)
+    # db = LagouDb().db()
+    # db['proxy'].insert_many(valid_proxy)
 
 
 

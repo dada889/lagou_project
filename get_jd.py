@@ -7,41 +7,19 @@ import re
 import bs4
 import time
 import socket
+import threading
+from lagou_db import LagouDb
+from get_proxy import ProxyCheck, get_getproxy
+
 socket.setdefaulttimeout(5)
 
-proxy = urllib2.ProxyHandler({'http': '180.166.112.47:8888'})
-opener = urllib2.build_opener(proxy)
-url_loader = urllib2
-url_loader.install_opener(opener)
-web = url_loader.urlopen('http://www.lagou.com/', timeout=5)
-text = web.read()
-# job_list = []
-# for data in xm.find():
-#     temp = {}
-#     print data['positionId']
-#     temp['positionId'] = data['positionId']
-#     temp['positionName'] = data['positionName']
-#     temp['companyId'] = data['companyId']
-#     temp['companyName'] = data['companyName']
-#     job_list.append(temp)
 
-# id = temp['positionId']
-# url_jd = 'http://www.lagou.com/jobs/' + str(id) + '.html'
-# response = urllib2.urlopen(url_jd)
-# web = response.read()
-# soup = bs4.BeautifulSoup(web)
-# jd = soup.select('dd.job_bt p')
-# jd = soup.find('dd', {'class': 'job_bt'})
-# jd_str = jd.text.strip('\s*\n\s*')
-#
-# post_again = soup.select('a.position')
-#
-# bs_rela = soup.find('dl', {'class': 'post_again module-container'}).find('ul')
-#
-# details_str = bs_rela.text.strip('\s*\n\s*')
-# details_list = re.split('\.*\s+', details_str)[1:-1]
-# posi_href_list = bs_rela.select('a.position')
-# id_list = [filter(str.isdigit, id.attrs['href']) for id in posi_href_list]
+# proxy = urllib2.ProxyHandler({'http': '180.166.112.47:8888'})
+# opener = urllib2.build_opener(proxy)
+# url_loader = urllib2
+# url_loader.install_opener(opener)
+# web = url_loader.urlopen('http://www.lagou.com/', timeout=5)
+# text = web.read()
 
 
 def chunks(l, n):
@@ -72,28 +50,11 @@ def get_jd(job_id):
     return result
 
 
-desktop = MongoClient('localhost', 27017)
-d_lagou = desktop['lagou']
-d_test = d_lagou[u'test']
-d_test_jd = d_lagou['test_jd']
-d_test_mis = d_lagou['test_mis']
-
-
-thinkpad = MongoClient('192.168.1.18', 27017)
-t_lagou = thinkpad['lagou']
-t_test = t_lagou['test']
-
-# temp = d_test.find_one()
-# result = get_jd(temp['positionId'])
-# isinstance(temp_jd, dict)
-# d_test_jd.insert(result)
-
-
 def go(ip, db_name, collection_name, num=0):
     client = MongoClient(ip, 27017)
     db = client[db_name]
     collection = db[collection_name]
-    colle_jd = db[collection_name+'_jd']
+    colle_jd = db[collection_name + '_jd']
     successed = []
     failed = []
     for i in collection.find({}, {'positionId': 1})[num:]:
@@ -110,7 +71,137 @@ def go(ip, db_name, collection_name, num=0):
         time.sleep(2)
     return successed, failed, num
 
-s = []
-f = []
-s, f, n = go('localhost', 'lagou', 'test', 180)
 
+class GetJd(threading.Thread):
+    def __init__(self, id_list, db, proxy='180.166.112.47:8888'):
+        threading.Thread.__init__(self)
+        self.job_id_list = id_list
+        self.proxy = proxy
+        self.db = db
+
+    def collect_jd(self, time_out=5):
+
+
+        for id in self.job_id_list:
+            result = {}
+            try:
+                url = 'http://www.lagou.com/jobs/' + str(id) + '.html'
+                proxy = urllib2.ProxyHandler({'http': self.proxy})
+                opener = urllib2.build_opener(proxy)
+                url_loader = urllib2
+                url_loader.install_opener(opener)
+                web = url_loader.urlopen(url, timeout=time_out).read()
+                soup = bs4.BeautifulSoup(web)
+                jd = soup.find('dd', {'class': 'job_bt'})
+                jd_str = jd.text.strip('\s*\n\s*')
+                bs_rela = soup.find('dl', {'class': 'post_again module-container'}).find('ul')
+            except:
+                failed_id.append(id)
+                valid_proxy_dict[self.proxy] += 1
+                print 'proxy %s fail to get jd in id %s' % (self.proxy, id)
+                continue
+            details_str = bs_rela.text.strip('\n')
+            details_list = re.split('\.*\s+', details_str)[1:-1]
+            details_list = [i for i in chunks(details_list, 3)]
+            posi_href_list = bs_rela.select('a.position')
+            id_list = [filter(str.isdigit, str(id1.attrs['href'])) for id1 in posi_href_list]
+            result['positionId'] = id
+            result['jd'] = jd_str
+            result['post_again'] = dict(zip(id_list, details_list))
+            # self.temp.append(result)
+            self.db.insert_one(result)
+            print 'proxy %s success in id %s' % (self.proxy, id)
+
+    def run(self):
+        self.collect_jd()
+
+
+if __name__ == "__main__":
+    lagou = LagouDb().db()
+    proxy_list = []
+    valid_proxy = []
+    failed_id = []
+    jd_db = lagou[u'杭州_jd']
+    all_id = []
+    cursor = lagou[u'杭州'].find({}, {'positionId': 1})[0:200]
+    for i in cursor:
+        all_id.append(i['positionId'])
+
+    checkThreads = []
+    crawlThreads = []
+    # get the proxy list
+    for i in range(1, 3):
+        proxy_list += get_getproxy(i)
+    print 'get %s proxy' % len(proxy_list)
+
+    ###########################################################################
+    # check proxy
+    print 'check proxy\n===================================================='
+    t_num = 20
+    for i in range(t_num):
+        pl = proxy_list[i*len(proxy_list)/t_num:(i+1)*len(proxy_list)/t_num]
+        t = ProxyCheck(pl, valid_proxy)
+        checkThreads.append(t)
+
+    for i in range(len(checkThreads)):
+        checkThreads[i].start()
+
+    for i in range(len(checkThreads)):
+        checkThreads[i].join()
+    # save in mongoprint 'check proxy'
+    # print 'done check proxy, %s valid proxy' % len(valid_proxy)
+    # lagou['proxy'].insert_many(valid_proxy)
+
+    valid_proxy_dict = {}
+    for i in valid_proxy:
+        # print i['ip']
+        valid_proxy_dict[i] = 0
+    print 'done check proxy, %s valid proxy' % len(valid_proxy)
+    # lagou['proxy'].insert_many(valid_proxy)
+
+    ###########################################################################
+    # start crawling jd
+    print '\nstart crawling\n===================================================='
+    t_num = 20
+    for i in range(t_num):
+        idlist = all_id[i * len(all_id) / t_num:(i + 1) * len(all_id) / t_num]
+        t = GetJd(id_list=idlist, db=jd_db, proxy=valid_proxy[i])
+        crawlThreads.append(t)
+
+    for i in range(len(crawlThreads)):
+        crawlThreads[i].start()
+
+    for i in range(len(crawlThreads)):
+        crawlThreads[i].join()
+        if valid_proxy_dict[valid_proxy[i]] >= 5:
+            print 'remove proxy %s' % valid_proxy[i]
+            valid_proxy.remove(valid_proxy[i])
+
+
+
+
+    ###########################################################################
+    # start failed id
+    rep_time = 1
+    while (failed_id > 0) & (rep_time <=3):
+        all_id = failed_id
+        failed_id = []
+        print 'start failed id\n===================================================='
+        for i in range(t_num):
+            idlist = all_id[i * len(all_id) / t_num:(i + 1) * len(all_id) / t_num]
+            t = GetJd(id_list=idlist, proxy=valid_proxy[i])
+            crawlThreads.append(t)
+
+        for i in range(len(crawlThreads)):
+            crawlThreads[i].start()
+
+        for i in range(len(crawlThreads)):
+            crawlThreads[i].join()
+            if valid_proxy_dict[valid_proxy[i]] >= 5:
+                print 'remove proxy %s' % valid_proxy[i]
+                valid_proxy.remove(valid_proxy[i])
+        rep_time += 1
+
+    print 'done'
+    for i in valid_proxy_dict.keys():
+        print i, valid_proxy_dict[i]
