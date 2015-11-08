@@ -28,48 +28,48 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def get_jd(job_id):
-    result = {}
-    url = 'http://www.lagou.com/jobs/' + str(job_id) + '.html'
-    try:
-        response = urllib2.urlopen(url)
-        web = response.read()
-        soup = bs4.BeautifulSoup(web)
-        jd = soup.find('dd', {'class': 'job_bt'})
-        jd_str = jd.text.strip('\s*\n\s*')
-        bs_rela = soup.find('dl', {'class': 'post_again module-container'}).find('ul')
-    except:
-        return job_id
-    details_str = bs_rela.text.strip('\n')
-    details_list = re.split('\.*\s+', details_str)[1:-1]
-    details_list = [i for i in chunks(details_list, 3)]
-    posi_href_list = bs_rela.select('a.position')
-    id_list = [filter(str.isdigit, str(id.attrs['href'])) for id in posi_href_list]
-    result['jd'] = jd_str
-    result['post_again'] = dict(zip(id_list, details_list))
-    return result
-
-
-def go(ip, db_name, collection_name, num=0):
-    client = MongoClient(ip, 27017)
-    db = client[db_name]
-    collection = db[collection_name]
-    colle_jd = db[collection_name + '_jd']
-    successed = []
-    failed = []
-    for i in collection.find({}, {'positionId': 1})[num:]:
-        id = i['positionId']
-        result = get_jd(id)
-        if isinstance(result, dict):
-            colle_jd.insert(result)
-            successed.append(id)
-        else:
-            failed.append(id)
-            print 'fail', id
-        num += 1
-        print 'success', id, 'num', num
-        time.sleep(2)
-    return successed, failed, num
+# def get_jd(job_id):
+#     result = {}
+#     url = 'http://www.lagou.com/jobs/' + str(job_id) + '.html'
+#     try:
+#         response = urllib2.urlopen(url)
+#         web = response.read()
+#         soup = bs4.BeautifulSoup(web)
+#         jd = soup.find('dd', {'class': 'job_bt'})
+#         jd_str = jd.text.strip('\s*\n\s*')
+#         bs_rela = soup.find('dl', {'class': 'post_again module-container'}).find('ul')
+#     except:
+#         return job_id
+#     details_str = bs_rela.text.strip('\n')
+#     details_list = re.split('\.*\s+', details_str)[1:-1]
+#     details_list = [i for i in chunks(details_list, 3)]
+#     posi_href_list = bs_rela.select('a.position')
+#     id_list = [filter(str.isdigit, str(id.attrs['href'])) for id in posi_href_list]
+#     result['jd'] = jd_str
+#     result['post_again'] = dict(zip(id_list, details_list))
+#     return result
+#
+#
+# def go(ip, db_name, collection_name, num=0):
+#     client = MongoClient(ip, 27017)
+#     db = client[db_name]
+#     collection = db[collection_name]
+#     colle_jd = db[collection_name + '_jd']
+#     successed = []
+#     failed = []
+#     for i in collection.find({}, {'positionId': 1})[num:]:
+#         id = i['positionId']
+#         result = get_jd(id)
+#         if isinstance(result, dict):
+#             colle_jd.insert(result)
+#             successed.append(id)
+#         else:
+#             failed.append(id)
+#             print 'fail', id
+#         num += 1
+#         print 'success', id, 'num', num
+#         time.sleep(2)
+#     return successed, failed, num
 
 
 class GetJd(threading.Thread):
@@ -80,8 +80,6 @@ class GetJd(threading.Thread):
         self.db = db
 
     def collect_jd(self, time_out=5):
-
-
         for id in self.job_id_list:
             result = {}
             try:
@@ -102,7 +100,7 @@ class GetJd(threading.Thread):
                 continue
             details_str = bs_rela.text.strip('\n')
             details_list = re.split('\.*\s+', details_str)[1:-1]
-            details_list = [i for i in chunks(details_list, 3)]
+            details_list = [j for j in chunks(details_list, 3)]
             posi_href_list = bs_rela.select('a.position')
             id_list = [filter(str.isdigit, str(id1.attrs['href'])) for id1 in posi_href_list]
             result['positionId'] = id
@@ -114,6 +112,24 @@ class GetJd(threading.Thread):
 
     def run(self):
         self.collect_jd()
+
+class EliminateProxy(threading.Thread):
+    def __init__(self, valid_proxy):
+        threading.Thread.__init__(self)
+        self.valid_proxy = valid_proxy
+
+    def eliminate(self):
+        for proxy in valid_proxy.keys():
+            if valid_proxy[proxy] >= 5:
+                valid_proxy.pop(proxy, None)
+
+    def run(self):
+        self.eliminate()
+
+
+
+
+
 
 
 if __name__ == "__main__":
@@ -183,7 +199,7 @@ if __name__ == "__main__":
     ###########################################################################
     # start failed id
     rep_time = 1
-    while (failed_id > 0) & (rep_time <=3):
+    while (failed_id > 0) & (rep_time <= 3):
         all_id = failed_id
         failed_id = []
         print 'start failed id\n===================================================='

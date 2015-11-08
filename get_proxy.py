@@ -75,7 +75,8 @@ class ProxyCheck(threading.Thread):
                 timeused = time.time() - t1
                 pos = result.find('030173')
                 if pos > 1:
-                    self.valid_proxy.append(proxy['ip'])
+                    self.valid_proxy[proxy['ip']] = 0
+                    # self.valid_proxy.append(proxy['ip'])
                     print 'get pos', proxy['ip'], time.time()
                 else:
                     print 'not pos', proxy['ip'], time.time()
@@ -85,6 +86,7 @@ class ProxyCheck(threading.Thread):
 
     def run(self):
         self.checkProxy()
+
 
 if __name__ == "__main__":
     valid_proxy = []
